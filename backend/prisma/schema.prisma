@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id                Int      @id @default(autoincrement())
+  cui               String   @unique
+  denumire          String
+  cod_inmatriculare String?
+  stare             String?
+  judet             String?
+  localitate        String?
+  adresa            String?
+  cod_postal        String?
+  telefon           String?
+  fax               String?
+  email             String?
+  web               String?
+  cod_caen          String?
+  caen_denumire     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([cui])
+  @@index([denumire])
+  @@index([judet])
+  @@index([stare])
+  @@index([cod_caen])
+}
