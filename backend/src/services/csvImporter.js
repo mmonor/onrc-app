@@ -1,13 +1,11 @@
+require('dotenv').config();
 const fs = require('fs');
 const csv = require('csv-parser');
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
-
-
 const BATCH_SIZE = 1000;
 
- // obiect care tine starea curenta a importului csv
 let importStatus = {
   running: false,
   processed: 0,
@@ -17,50 +15,56 @@ let importStatus = {
   message: 'idle',
 };
 
-// getter pentru statusul curent din afara modulului
 function getStatus() {
   return importStatus;
 }
 
-// pentru fiecare rand, "curatam" datele
+// Cheile din CSV vin cu ghilimele: '"DENUMIRE"' în loc de 'DENUMIRE'.
+// Această funcție curăță toate cheile unui rând eliminând ghilimelele.
+function cleanRow(row) {
+  const cleaned = {};
+  for (const [key, value] of Object.entries(row)) {
+    const cleanKey = key.replace(/"/g, '').trim();
+    cleaned[cleanKey] = value;
+  }
+  return cleaned;
+}
+
 function sanitize(row) {
+  const r = cleanRow(row);
+
+  const strada = [
+    r['ADR_DEN_STRADA'],
+    r['ADR_NR_STRADA'],
+    r['ADR_BLOC'] ? `Bl. ${r['ADR_BLOC']}` : '',
+    r['ADR_SCARA'] ? `Sc. ${r['ADR_SCARA']}` : '',
+    r['ADR_ETAJ'] ? `Et. ${r['ADR_ETAJ']}` : '',
+    r['ADR_APARTAMENT'] ? `Ap. ${r['ADR_APARTAMENT']}` : '',
+  ].filter(Boolean).join(', ');
+
   return {
-    cui:              String(row['CUI']              || row['cui']              || '').trim(),
-    denumire:         String(row['DENUMIRE']         || row['denumire']         || '').trim(),
-    cod_inmatriculare:String(row['COD_INMATRICULARE']|| row['cod_inmatriculare']|| '').trim() || null,
-    stare:            String(row['STARE']            || row['stare']            || '').trim() || null,
-    judet:            String(row['JUDET']            || row['judet']            || '').trim() || null,
-    localitate:       String(row['LOCALITATE']       || row['localitate']       || '').trim() || null,
-    adresa:           String(row['ADRESA']           || row['adresa']           || '').trim() || null,
-    cod_postal:       String(row['COD_POSTAL']       || row['cod_postal']       || '').trim() || null,
-    telefon:          String(row['TELEFON']          || row['telefon']          || '').trim() || null,
-    fax:              String(row['FAX']              || row['fax']              || '').trim() || null,
-    email:            String(row['EMAIL']            || row['email']            || '').trim() || null,
-    web:              String(row['WEB']              || row['web']              || '').trim() || null,
-    cod_caen:         String(row['COD_CAEN']         || row['cod_caen']         || '').trim() || null,
-    caen_denumire:    String(row['CAEN_DENUMIRE']    || row['caen_denumire']    || '').trim() || null,
+    cui:               String(r['CUI'] || '').trim(),
+    denumire:          String(r['DENUMIRE'] || '').trim(),
+    cod_inmatriculare: String(r['COD_INMATRICULARE'] || '').trim() || null,
+    stare:             null,
+    judet:             String(r['ADR_JUDET'] || '').trim() || null,
+    localitate:        String(r['ADR_LOCALITATE'] || '').trim() || null,
+    adresa:            strada || null,
+    cod_postal:        String(r['ADR_COD_POSTAL'] || '').trim() || null,
+    telefon:           null,
+    fax:               null,
+    email:             null,
+    web:               String(r['WEB'] || '').trim() || null,
+    cod_caen:          null,
+    caen_denumire:     null,
   };
 }
 
-// trimit un batch catre postgreSQL intr-un query
-// create many e mai eficient decat create individual
-// skip duplicates pt CUI
-async function flushBatch(batch) {
-  await prisma.company.createMany({
-    data: batch,
-    skipDuplicates: true,
-  });
-}
-
-
 async function importCSV(filePath) {
-
-  // lasam doar un import sa ruleze
   if (importStatus.running) {
     throw new Error('Import already in progress');
   }
 
-  // resetez statusul la fiecare import
   importStatus = {
     running: true,
     processed: 0,
@@ -70,50 +74,58 @@ async function importCSV(filePath) {
     message: 'running',
   };
 
-  
-  return new Promise((resolve, reject) => {
-    let batch = [];
+  let flushQueue = Promise.resolve();
+  let batch = [];
 
-    // stream-ul de citire pe chunks, cu parser csv
-    const stream = fs.createReadStream(filePath)
-      .pipe(csv({ separator: ',', strict: false }));
+  const stream = fs.createReadStream(filePath, { encoding: 'utf8' })
+    .pipe(csv({
+      separator: '^',
+      bom: true,
+      strict: false,
+      quote: '|',
+    }));
 
-   
-    stream.on('data', async (row) => {
-      const record = sanitize(row);
+  stream.on('data', (row) => {
+    const record = sanitize(row);
 
-      // ignor randurile fara cui sau denumire
-      if (!record.cui || !record.denumire) return;
+    if (!record.denumire) return;
 
-      batch.push(record);
+    if (!record.cui || record.cui === '0') {
+      if (!record.cod_inmatriculare) return;
+      record.cui = `NoCUI_${record.cod_inmatriculare}`;
+    }
 
-      
-      if (batch.length >= BATCH_SIZE) {
+    batch.push(record);
 
-        stream.pause();
+    if (batch.length >= BATCH_SIZE) {
+      const currentBatch = [...batch];
+      batch = [];
 
-        const currentBatch = [...batch]; 
-        batch = [];                      
-
+      flushQueue = flushQueue.then(async () => {
         try {
-          await flushBatch(currentBatch);
-          importStatus.processed += currentBatch.length;
+          const result = await prisma.company.createMany({
+            data: currentBatch,
+            skipDuplicates: true,
+          });
+          importStatus.processed += result.count;
+          console.log(`Processed: ${importStatus.processed}`);
         } catch (err) {
           importStatus.errors += currentBatch.length;
           console.error('Batch error:', err.message);
-        } finally {
-          
-          stream.resume();
         }
-      }
-    });
+      });
+    }
+  });
 
-    // verific daca mai sunt date in batch
-    stream.on('end', async () => {
+  stream.on('end', () => {
+    flushQueue = flushQueue.then(async () => {
       if (batch.length > 0) {
         try {
-          await flushBatch(batch);
-          importStatus.processed += batch.length;
+          const result = await prisma.company.createMany({
+            data: batch,
+            skipDuplicates: true,
+          });
+          importStatus.processed += result.count;
         } catch (err) {
           importStatus.errors += batch.length;
         }
@@ -122,15 +134,14 @@ async function importCSV(filePath) {
       importStatus.running = false;
       importStatus.finishedAt = new Date();
       importStatus.message = 'done';
-      resolve(importStatus);
+      console.log(`Import finished. Total: ${importStatus.processed}`);
     });
+  });
 
-    
-    stream.on('error', (err) => {
-      importStatus.running = false;
-      importStatus.message = `error: ${err.message}`;
-      reject(err);
-    });
+  stream.on('error', (err) => {
+    importStatus.running = false;
+    importStatus.message = `error: ${err.message}`;
+    console.error('Import error:', err.message);
   });
 }
 
