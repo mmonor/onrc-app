@@ -1,7 +1,3 @@
-/* Cele trei directive Tailwind injectează clasele generate.
-   base = reset CSS + stiluri default pentru elemente HTML
-   components = clase reutilizabile (definite de noi sau plugin-uri)
-   utilities = clasele atomice (flex, p-4, text-sm etc.) — cele mai folosite */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
