@@ -1,14 +1,21 @@
-FROM node:20-alpine
+FROM node:20-bullseye-slim
+
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY prisma ./prisma
+RUN npx prisma generate
 
 COPY . .
 
-RUN npx prisma generate
+
+RUN chmod +x entrypoint.sh
 
 EXPOSE 3001
 
-CMD ["npm", "run", "dev"]
+
+CMD ["sh", "entrypoint.sh"]
