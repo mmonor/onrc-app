@@ -1,11 +1,11 @@
 const express = require('express');
-const {prismaClient} = require('@prisma/prismaClient');
+const {PrismaClient} = require('@prisma/client');
 
 const router = express.Router();
 
 const prisma = new PrismaClient();
 
-router.get('/', async (req, res) => {
+router.get('/', async (req, res,next) => {
     try {
 
     const {
@@ -90,5 +90,4 @@ router.get('/:cui', async (req, res, next) => {
 });
 module.exports = router;
 
-    
     
