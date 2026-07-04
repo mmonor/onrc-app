@@ -15,24 +15,42 @@ let importStatus = {
   message: 'idle',
 };
 
+let currentStream = null;
+let cancelRequested = false;
+
 function getStatus() {
   return importStatus;
 }
 
-// Cheile din CSV vin cu ghilimele: '"DENUMIRE"' în loc de 'DENUMIRE'.
-// Această funcție curăță toate cheile unui rând eliminând ghilimelele.
+function cancelImport() {
+  if (!importStatus.running) return false;
+
+  cancelRequested = true;
+
+  
+  importStatus.running = false;
+  importStatus.finishedAt = new Date();
+  importStatus.message = 'cancelled';
+  console.log(`Import cancelled. Processed so far: ${importStatus.processed}`);
+
+  if (currentStream) {
+    currentStream.destroy();
+    currentStream = null;
+  }
+
+  return true;
+}
+
 function cleanRow(row) {
   const cleaned = {};
   for (const [key, value] of Object.entries(row)) {
-    const cleanKey = key.replace(/"/g, '').trim();
-    cleaned[cleanKey] = value;
+    cleaned[key.replace(/"/g, '').trim()] = value;
   }
   return cleaned;
 }
 
 function sanitize(row) {
   const r = cleanRow(row);
-
   const strada = [
     r['ADR_DEN_STRADA'],
     r['ADR_NR_STRADA'],
@@ -51,19 +69,16 @@ function sanitize(row) {
     localitate:        String(r['ADR_LOCALITATE'] || '').trim() || null,
     adresa:            strada || null,
     cod_postal:        String(r['ADR_COD_POSTAL'] || '').trim() || null,
-    telefon:           null,
-    fax:               null,
-    email:             null,
+    telefon:           null, fax: null, email: null,
     web:               String(r['WEB'] || '').trim() || null,
-    cod_caen:          null,
-    caen_denumire:     null,
+    cod_caen:          null, caen_denumire: null,
   };
 }
 
 async function importCSV(filePath) {
-  if (importStatus.running) {
-    throw new Error('Import already in progress');
-  }
+  if (importStatus.running) throw new Error('Import already in progress');
+
+  cancelRequested = false;
 
   importStatus = {
     running: true,
@@ -78,18 +93,15 @@ async function importCSV(filePath) {
   let batch = [];
 
   const stream = fs.createReadStream(filePath, { encoding: 'utf8' })
-    .pipe(csv({
-      separator: '^',
-      bom: true,
-      strict: false,
-      quote: '|',
-    }));
+    .pipe(csv({ separator: '^', bom: true, strict: false, quote: '|' }));
+
+  currentStream = stream;
 
   stream.on('data', (row) => {
+    if (cancelRequested) return;
+
     const record = sanitize(row);
-
     if (!record.denumire) return;
-
     if (!record.cui || record.cui === '0') {
       if (!record.cod_inmatriculare) return;
       record.cui = `NoCUI_${record.cod_inmatriculare}`;
@@ -102,6 +114,7 @@ async function importCSV(filePath) {
       batch = [];
 
       flushQueue = flushQueue.then(async () => {
+        if (cancelRequested) return;
         try {
           const result = await prisma.company.createMany({
             data: currentBatch,
@@ -119,6 +132,7 @@ async function importCSV(filePath) {
 
   stream.on('end', () => {
     flushQueue = flushQueue.then(async () => {
+      if (cancelRequested) return;
       if (batch.length > 0) {
         try {
           const result = await prisma.company.createMany({
@@ -130,7 +144,7 @@ async function importCSV(filePath) {
           importStatus.errors += batch.length;
         }
       }
-
+      currentStream = null;
       importStatus.running = false;
       importStatus.finishedAt = new Date();
       importStatus.message = 'done';
@@ -138,11 +152,10 @@ async function importCSV(filePath) {
     });
   });
 
-  stream.on('error', (err) => {
-    importStatus.running = false;
-    importStatus.message = `error: ${err.message}`;
-    console.error('Import error:', err.message);
+  stream.on('error', () => {
+    // Eroarea la destroy e așteptată la cancel — ignorăm silențios.
+    currentStream = null;
   });
 }
 
-module.exports = { importCSV, getStatus };
+module.exports = { importCSV, getStatus, cancelImport };
