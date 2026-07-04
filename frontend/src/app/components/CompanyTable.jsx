@@ -1,3 +1,4 @@
+import Link from 'next/link';
 
 export default function CompanyTable({ companies }) {
   if (companies.length === 0) {
@@ -22,18 +23,26 @@ export default function CompanyTable({ companies }) {
         </thead>
         <tbody className="divide-y divide-gray-100 bg-white">
           {companies.map((company) => (
-            <tr key={company.id} className="hover:bg-gray-50">
-              <td className="px-4 py-3 text-sm font-mono">{company.cui}</td>
-              <td className="px-4 py-3 text-sm">{company.denumire}</td>
+            <tr key={company.id} className="hover:bg-gray-50 cursor-pointer">
+              <td className="px-4 py-3 text-sm font-mono">
+                <Link href={`/company/${company.cui}`} className="hover:text-blue-600">
+                  {company.cui}
+                </Link>
+              </td>
+              <td className="px-4 py-3 text-sm">
+                <Link href={`/company/${company.cui}`} className="hover:text-blue-600">
+                  {company.denumire}
+                </Link>
+              </td>
               <td className="px-4 py-3 text-sm">{company.judet || '—'}</td>
               <td className="px-4 py-3 text-sm">
-                <span
-                  className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                    company.stare === 'ACTIVA'
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
+                <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                  company.stare === 'FUNCȚIUNE'
+                    ? 'bg-green-100 text-green-700'
+                    : company.stare
+                    ? 'bg-gray-100 text-gray-600'
+                    : 'bg-gray-50 text-gray-400'
+                }`}>
                   {company.stare || '—'}
                 </span>
               </td>

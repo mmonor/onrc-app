@@ -1,7 +1,6 @@
-
 'use client';
-import { useRouter, useSearchParams } from 'next/navigation';
 
+import { useRouter, useSearchParams } from 'next/navigation';
 
 const JUDETE = [
   'ALBA', 'ARAD', 'ARGES', 'BACAU', 'BIHOR', 'BISTRITA-NASAUD',
@@ -13,19 +12,30 @@ const JUDETE = [
   'TIMIS', 'TULCEA', 'VALCEA', 'VASLUI', 'VRANCEA', 'BUCURESTI',
 ];
 
-const STARI = ['ACTIVA', 'RADIATA', 'SUSPENDATA', 'DIZOLVATA'];
+// Valorile reale din DB — extrase cu groupBy după importul de stare.
+const STARI = [
+  'FUNCȚIUNE',
+  'RADIATĂ',
+  'ÎNTRERUPERE TEMPORARĂ DE ACTIVITATE',
+  'DIZOLVARE',
+  'LICHIDARE',
+  'FALIMENT',
+  'INSOLVENȚĂ',
+  'SEDIU EXPIRAT',
+  'PERIOADĂ DE SUSPENDARE ACTIVITATE EXPIRATĂ',
+  'MANDAT ADMINISTRATORI EXPIRAT',
+  'DIZOLVARE JUDICIARĂ, CF ART.237 DIN LEGEA NR. 31/1990',
+  'DURATA SOCIETĂȚII EXPIRATĂ',
+];
 
 export default function Filters() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  
   function updateFilter(key, value) {
     const params = new URLSearchParams(searchParams.toString());
-
     if (value) params.set(key, value); else params.delete(key);
     params.set('page', '1');
-
     router.push(`/?${params.toString()}`);
   }
 
