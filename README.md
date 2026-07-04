@@ -15,7 +15,7 @@ Ai nevoie doar de:
 ## 1. Clonează repository-ul
 
 ```bash
-git clone https://gitlab.com/USERNAME/onrc.git
+git clone https://gitlab.com/mmonor/onrc-app.git
 cd onrc
 ```
 
