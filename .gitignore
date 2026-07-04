@@ -5,3 +5,5 @@ dist/
 .next/
 *.log
 prisma/migrations/dev.db
+backend/uploads/*
+!backend/uploads/.gitkeep
