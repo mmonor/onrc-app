@@ -1,6 +1,6 @@
 FROM node:20-bullseye-slim
 
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y && apt-get install -y openssl bash && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -12,10 +12,8 @@ RUN npx prisma generate
 
 COPY . .
 
-
 RUN chmod +x entrypoint.sh
 
 EXPOSE 3001
 
-
-CMD ["sh", "entrypoint.sh"]
+CMD ["bash", "entrypoint.sh"]
