@@ -2,7 +2,6 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
-    env_file: .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -20,17 +19,17 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    env_file: .env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      PORT: ${PORT}
-      NODE_ENV: ${NODE_ENV}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      PORT: 3001
+      NODE_ENV: development
     ports:
       - "3001:3001"
     volumes:
       - ./backend:/app
       - /app/node_modules
       - ./data:/app/data
+      - ./backend/uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -39,7 +38,10 @@ services:
     build: ./frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      # NEXT_PUBLIC_ e vizibil în browser — folosim localhost
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      # API_URL intern e folosit de Next.js server-side — folosim numele serviciului
+      API_URL: http://backend:3001
     ports:
       - "3000:3000"
     volumes:
